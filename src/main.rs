@@ -4,12 +4,12 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow};
 use dotenv::dotenv;
-use image::GenericImageView;
 use image::imageops::FilterType;
+use image::{GenericImageView, ImageReader};
 use serde_json;
 use teloxide::types::InputFile;
 use teloxide::{prelude::*, utils::command::BotCommands};
-use tempfile::tempdir;
+use tempfile::{Builder, NamedTempFile};
 use tokio::fs as tokio_fs;
 
 // 添加命令处理结构
@@ -24,7 +24,9 @@ enum BotCommand {
 
 async fn process_image(input_path: &Path, output_path: &Path) -> Result<()> {
     // 加载图片
-    let img = image::open(input_path)?;
+    let img = ImageReader::open(input_path)?
+        .with_guessed_format()?
+        .decode()?;
 
     // 获取原始尺寸
     let (width, height) = img.dimensions();
@@ -58,20 +60,23 @@ async fn process_image(input_path: &Path, output_path: &Path) -> Result<()> {
 }
 
 async fn process_webm(input_path: &Path, output_path: &Path) -> Result<()> {
-    // 使用FFmpeg获取视频信息，改用JSON格式
-    let output = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height,r_frame_rate:format=duration",
-            "-of",
-            "json", // 改用JSON格式输出
-            input_path.to_str().unwrap(),
-        ])
-        .output()?;
+    // 使用ffprobe获取视频信息，改用JSON格式
+    let mut command = Command::new("ffprobe");
+    let output = command.args([
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,r_frame_rate:format=duration",
+        "-of",
+        "json", // 改用JSON格式输出
+        input_path.to_str().unwrap(),
+    ]);
+
+    log::debug!("FFprobe command: {:?}", &output);
+
+    let output = output.output()?;
 
     if !output.status.success() {
         return Err(anyhow!("FFprobe命令执行失败"));
@@ -111,11 +116,14 @@ async fn process_webm(input_path: &Path, output_path: &Path) -> Result<()> {
         .ok_or_else(|| anyhow!("无法获取视频帧率"))?;
     let fps_parts: Vec<&str> = fps_str.split('/').collect();
     let fps = if fps_parts.len() == 2 {
-        let num: f32 = fps_parts[0].parse()?;
-        let den: f32 = fps_parts[1].parse()?;
+        let num: f32 = fps_parts[0].parse().context("无法解析帧率分子")?;
+        let den: f32 = fps_parts[1].parse().context("无法解析帧率分母")?;
+        if den == 0.0 {
+            return Err(anyhow!("帧率分母为零"));
+        }
         num / den
     } else {
-        fps_str.parse()?
+        fps_str.parse().context("无法解析帧率")?
     };
 
     // 计算新尺寸，确保至少一边是512像素
@@ -132,28 +140,31 @@ async fn process_webm(input_path: &Path, output_path: &Path) -> Result<()> {
     let target_duration = if duration > 3.0 { 3.0 } else { duration };
 
     // 使用FFmpeg处理视频
-    let status = Command::new("ffmpeg")
-        .args([
-            "-i",
-            input_path.to_str().unwrap(),
-            "-t",
-            &target_duration.to_string(),
-            "-vf",
-            &format!("scale={}:{}", new_width, new_height),
-            "-r",
-            &target_fps.to_string(),
-            "-c:v",
-            "libvpx-vp9",
-            "-b:v",
-            "200k",
-            "-auto-alt-ref",
-            "0",
-            "-pix_fmt",
-            "yuva420p",
-            "-f",
-            "webm",
-            output_path.to_str().unwrap(),
-        ])
+    let mut command = Command::new("ffmpeg");
+    let status = command.args([
+        "-y",
+        "-i",
+        input_path.to_str().unwrap(),
+        "-t",
+        &target_duration.to_string(),
+        "-vf",
+        &format!("scale={}:{}", new_width, new_height),
+        "-r",
+        &target_fps.to_string(),
+        "-c:v",
+        "libvpx-vp9",
+        "-b:v",
+        "200k",
+        "-auto-alt-ref",
+        "0",
+        "-pix_fmt",
+        "yuva420p",
+        "-f",
+        "webm",
+        output_path.to_str().unwrap(),
+    ]);
+    log::debug!("FFmpeg command: {:?}", &status);
+    let status = status
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
@@ -174,111 +185,183 @@ async fn process_webm(input_path: &Path, output_path: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn handle_file(bot: Bot, msg: Message) -> ResponseResult<()> {
-    // 获取文件
-    let file = if let Some(photo) = msg.photo() {
-        // 获取最高质量的照片
-        let photo = photo.last().unwrap();
-        bot.get_file(&photo.file.id).await?
-    } else if let Some(document) = msg.document() {
-        // 检查文件MIME类型
-        let mime = document.mime_type.clone().unwrap();
-        let mime = mime.subtype().as_str();
+async fn handle_file(bot: Bot, msg: Message) -> anyhow::Result<()> {
+    log::info!("ChatID: {}, Received New message", msg.chat.id);
 
-        if mime.starts_with("image/")
-            || mime.starts_with("video/")
-            || mime == "application/octet-stream"
+    let file_id = if let Some(photo) = msg.photo() {
+        // 获取最高质量的照片，照片隐式为图片类型
+        photo.last().expect("照片列表不应为空").file.id.clone()
+    } else if let Some(document) = msg.document() {
+        match document
+            .mime_type
+            .as_ref()
+            .map(|mime| mime.to_string())
+            .as_deref()
         {
-            bot.get_file(&document.file.id).await?
-        } else {
-            bot.send_message(
-                msg.chat.id,
-                format!("请发送图片或WebM视频，当前MIME类型: {}", mime),
-            )
-            .await?;
-            return Ok(());
+            Some(mime)
+                if mime.starts_with("image/")
+                    || mime.starts_with("video/")
+                    || mime == "application/octet-stream" =>
+            {
+                document.file.id.clone()
+            }
+            Some(mime) => {
+                bot.send_message(
+                    msg.chat.id,
+                    format!("不支持的文档MIME类型: {}。请发送图片或WebM视频。", mime),
+                )
+                .await?;
+                return Ok(());
+            }
+            None => {
+                // 没有提供MIME类型，允许下载并让 infer 库决定
+                document.file.id.clone()
+            }
         }
     } else if let Some(sticker) = msg.sticker() {
-        // 检查贴纸的MIME类型
-        bot.get_file(&sticker.file.id).await?
+        // 贴纸可以是 image/webp 或 video/webm。下载后让 infer 库确认类型。
+        sticker.file.id.clone()
+    } else if let Some(animation) = msg.animation() {
+        match animation
+            .mime_type
+            .as_ref()
+            .map(|mime| mime.to_string())
+            .as_deref()
+        {
+            Some(mime) if mime.starts_with("video/") => {
+                // 动画通常是视频 (例如 Telegram 中的 GIF 会作为 MP4 发送)
+                animation.file.id.clone()
+            }
+            Some(mime) => {
+                bot.send_message(
+                    msg.chat.id,
+                    format!("不支持的动画MIME类型: {}。请发送WebM视频。", mime),
+                )
+                .await?;
+                return Ok(());
+            }
+            None => {
+                // 没有提供MIME类型，允许下载并让 infer 库决定
+                animation.file.id.clone()
+            }
+        }
     } else {
         bot.send_message(msg.chat.id, "请发送图片或WebM视频")
             .await?;
         return Ok(());
     };
 
-    // 创建临时目录
-    let temp_dir = tempdir()?;
-    let input_path = temp_dir.path().join("input");
-    let mut output_path = temp_dir.path().join("output");
+    // 下载文件前先获取文件信息
+    let tg_file = bot.get_file(&file_id).await?;
+
+    // 创建输入临时文件
+    let input_temp_file = NamedTempFile::new().context("无法创建输入临时文件")?;
+    let input_file_path = input_temp_file.path().to_path_buf();
 
     // 下载文件
     let file_url = format!(
         "https://api.telegram.org/file/bot{}/{}",
         bot.token(),
-        file.path
+        tg_file.path
     );
     let bytes = reqwest::get(&file_url).await?.bytes().await?;
-    tokio_fs::write(&input_path, &bytes).await?;
+    tokio_fs::write(&input_file_path, &bytes)
+        .await
+        .context("无法写入输入临时文件")?;
 
     // 检测文件类型并处理
-    let is_image = infer::get_from_path(&input_path)
-        .map(|info| {
-            info.map(|i| i.mime_type().starts_with("image/"))
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
+    let detected_type_result =
+        infer::get_from_path(&input_file_path).context("无法从路径获取类型信息推断")?;
 
-    let is_video = infer::get_from_path(&input_path)
-        .map(|info| {
-            info.map(|i| i.mime_type().starts_with("video/"))
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-
-    let result = if is_image {
-        // bot.send_message(msg.chat.id, "正在处理图片...").await?;
-        output_path.set_extension("webp");
-        process_image(&input_path, &output_path).await
-    } else if is_video {
-        // bot.send_message(msg.chat.id, "正在处理视频...").await?;
-        output_path.set_extension("webm");
-        process_webm(&input_path, &output_path).await
-    } else {
-        Err(anyhow!("不支持的文件类型，请发送图片或WebM视频"))
+    let (is_image, is_video, detected_mime_str) = match detected_type_result {
+        Some(info) => (
+            info.mime_type().starts_with("image/"),
+            info.mime_type().starts_with("video/"),
+            info.mime_type().to_string(),
+        ),
+        None => (false, false, "未知 (infer无法识别)".to_string()),
     };
 
-    // 处理结果
-    match result {
-        Ok(_) => {
-            // 发送处理后的文件
-            let input_doc = InputFile::file(&output_path);
-            if is_image {
-                bot.send_sticker(msg.chat.id, input_doc).await?;
-                bot.send_message(
-                    msg.chat.id,
-                    "这是处理后的贴纸，您可以添加到 @Stickers bot 创建的贴纸包中",
-                )
-                .await?;
-            } else {
-                bot.send_sticker(msg.chat.id, input_doc).await?;
-                bot.send_message(
-                    msg.chat.id,
-                    "这是处理后的贴纸，您可以添加到 @Stickers bot 创建的贴纸包中",
-                )
-                .await?;
-            }
-        }
-        Err(e) => {
-            bot.send_message(msg.chat.id, format!("处理失败: {}", e))
-                .await?;
-        }
+    let processing_outcome: Result<(NamedTempFile, std::path::PathBuf), anyhow::Error>;
+
+    if is_image {
+        let output_temp = Builder::new()
+            .suffix(".webp")
+            .tempfile()
+            .context("无法创建WebP输出临时文件")?;
+        let output_path = output_temp.path().to_path_buf();
+
+        log::debug!(
+            "ChatID: {}, 输入: {:?}, 检测到的类型: {}. 输出到: {:?}",
+            msg.chat.id,
+            input_file_path,
+            detected_mime_str,
+            output_path
+        );
+        processing_outcome = process_image(&input_file_path, &output_path)
+            .await
+            .map(|_| (output_temp, output_path))
+            .context("图片处理失败");
+    } else if is_video {
+        let output_temp = Builder::new()
+            .suffix(".webm")
+            .tempfile()
+            .context("无法创建WebM输出临时文件")?;
+        let output_path = output_temp.path().to_path_buf();
+
+        log::debug!(
+            "ChatID: {}, 输入: {:?}, 检测到的类型: {}. 输出到: {:?}",
+            msg.chat.id,
+            input_file_path,
+            detected_mime_str,
+            output_path
+        );
+        processing_outcome = process_webm(&input_file_path, &output_path)
+            .await
+            .map(|_| (output_temp, output_path))
+            .context("视频处理失败");
+    } else {
+        processing_outcome = Err(anyhow!(
+            "不支持的文件类型 (检测为: {}). 请发送图片或WebM视频.",
+            detected_mime_str
+        ));
     }
 
+    // 处理结果
+    match processing_outcome {
+        Ok((_output_temp_file_guard, processed_file_path)) => {
+            // _output_temp_file_guard 使临时文件保持活动状态
+            // 发送处理后的文件
+            let input_doc = InputFile::file(&processed_file_path);
+            // 根据原始判断（is_image）或处理后的文件类型发送
+            // 当前代码对图片和视频都使用 send_sticker
+            bot.send_sticker(msg.chat.id, input_doc).await?;
+            log::info!(
+                "ChatID: {}, 处理成功，发送文件: {:?}",
+                msg.chat.id,
+                processed_file_path
+            );
+            // 可选：发送成功消息
+            // bot.send_message(
+            //     msg.chat.id,
+            //     "这是处理后的贴纸，您可以添加到 @Stickers bot 创建的贴纸包中",
+            // )
+            // .await?;
+        }
+        Err(e) => {
+            // 向用户发送一个简洁的错误消息
+            bot.send_message(msg.chat.id, format!("处理失败: {}", e.root_cause())) // 使用 e.root_cause() 或 e.to_string() 获取更简洁的用户友好消息
+                .await?;
+            // 在控制台记录详细的错误信息，包括堆栈追踪（如果 RUST_BACKTRACE=1）
+            log::error!("文件处理失败: {:?}", e);
+        }
+    }
+    // input_temp_file 和 _output_temp_file_guard (如果Ok) 将在此处超出作用域，
+    // 导致它们对应的临时文件被自动删除。
     Ok(())
 }
 
-async fn command_handler(bot: Bot, msg: Message, cmd: BotCommand) -> ResponseResult<()> {
+async fn command_handler(bot: Bot, msg: Message, cmd: BotCommand) -> anyhow::Result<()> {
     match cmd {
         BotCommand::Help | BotCommand::Start => {
             bot.send_message(
@@ -319,7 +402,10 @@ async fn main() -> Result<()> {
         )
         .branch(
             dptree::filter(|msg: Message| {
-                msg.photo().is_some() || msg.document().is_some() || msg.sticker().is_some()
+                msg.photo().is_some()
+                    || msg.document().is_some()
+                    || msg.sticker().is_some()
+                    || msg.animation().is_some()
             })
             .endpoint(handle_file),
         );
