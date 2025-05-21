@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use dotenv::dotenv;
 use image::imageops::FilterType;
 use image::{GenericImageView, ImageReader};
@@ -391,10 +391,7 @@ async fn unhandled_message_handler(bot: Bot, msg: Message) -> anyhow::Result<()>
 }
 
 async fn unauthorized_access_handler(bot: Bot, msg: Message) -> anyhow::Result<()> {
-    log::warn!(
-        "ChatID: {} - Unauthorized access attempt.",
-        msg.chat.id
-    );
+    log::warn!("ChatID: {} - Unauthorized access attempt.", msg.chat.id);
     bot.send_message(msg.chat.id, "抱歉，您未被授权使用此机器人。")
         .await?;
     Ok(())
@@ -406,7 +403,7 @@ async fn main() -> Result<()> {
     dotenv().ok();
 
     // 初始化日志
-    pretty_env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     log::info!("Starting Telegram sticker bot...");
 
     // 从环境变量获取机器人TOKEN
@@ -414,29 +411,28 @@ async fn main() -> Result<()> {
         .context("未找到TELEGRAM_BOT_TOKEN环境变量。请在.env文件中设置或直接设置环境变量")?;
 
     // 白名单逻辑
-    let allowed_chat_ids_opt: Option<Arc<Vec<ChatId>>> =
-        match std::env::var("ALLOWED_CHAT_IDS") {
-            Ok(ids_str) => {
-                let ids: Vec<ChatId> = ids_str
-                    .split(',')
-                    .filter_map(|id_str| id_str.trim().parse::<i64>().ok().map(ChatId))
-                    .collect();
-                
-                if ids.is_empty() {
-                    log::warn!(
-                        "ALLOWED_CHAT_IDS 设置为 '{}', 解析后白名单为空。机器人将不会授权任何用户。",
-                        ids_str
-                    );
-                } else {
-                    log::info!("白名单已启用。允许的聊天 ID: {:?}", ids);
-                }
-                Some(Arc::new(ids))
+    let allowed_chat_ids_opt: Option<Arc<Vec<ChatId>>> = match std::env::var("ALLOWED_CHAT_IDS") {
+        Ok(ids_str) => {
+            let ids: Vec<ChatId> = ids_str
+                .split(',')
+                .filter_map(|id_str| id_str.trim().parse::<i64>().ok().map(ChatId))
+                .collect();
+
+            if ids.is_empty() {
+                log::warn!(
+                    "ALLOWED_CHAT_IDS 设置为 '{}', 解析后白名单为空。机器人将不会授权任何用户。",
+                    ids_str
+                );
+            } else {
+                log::info!("白名单已启用。允许的聊天 ID: {:?}", ids);
             }
-            Err(_) => {
-                log::info!("未设置 ALLOWED_CHAT_IDS。机器人将响应所有用户。");
-                None
-            }
-        };
+            Some(Arc::new(ids))
+        }
+        Err(_) => {
+            log::info!("未设置 ALLOWED_CHAT_IDS。机器人将响应所有用户。");
+            None
+        }
+    };
 
     let bot = Bot::new(token);
 
@@ -501,9 +497,10 @@ async fn main() -> Result<()> {
         )
         .branch(
             dptree::filter(file_auth_and_type_filter) // 应用白名单和类型过滤器
-            .endpoint(handle_file),
+                .endpoint(handle_file),
         )
-        .branch( // 对于已授权用户发送的、非命令且非文件的消息
+        .branch(
+            // 对于已授权用户发送的、非命令且非文件的消息
             dptree::entry()
                 .filter(unhandled_message_auth_filter)
                 .endpoint(unhandled_message_handler), // 发送欢迎信息
