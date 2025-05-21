@@ -17,7 +17,7 @@ before:
   hooks:
     - rustup default stable
     # - cargo install --locked cargo-zigbuild
-    - cargo install --locked cargo-cross
+    - cargo install --locked cross --git https://github.com/cross-rs/cross
     - cargo fetch --locked
 
 # Actually builds the binaries.
