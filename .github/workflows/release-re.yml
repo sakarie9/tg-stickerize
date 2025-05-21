@@ -1,0 +1,20 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - "v*" # Trigger on version tags like v1.0.0
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  id-token: write
+
+jobs:
+  release_with_goreleaser:
+    uses: sakarie9/rust-release-action/.github/workflows/reusable-rust-release.yaml@main
+    with:
+      project_name: "tg-stickerize" # The name of the project. This should match the project name in your Cargo.toml.
+      repo_owner: ${{ github.repository_owner }} # The owner/organization for the Docker image on GHCR (e.g., your GitHub username or org name)
+      repo_name: ${{ github.event.repository.name }} # The name of the repository for the Docker image on GHCR
