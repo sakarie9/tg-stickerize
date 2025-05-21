@@ -32,6 +32,8 @@ builds:
       - aarch64-unknown-linux-musl
   - id: windows-amd64-gnu
     builder: rust
+    # tool: cross
+    # command: build
     targets:
       - x86_64-pc-windows-gnu
 
