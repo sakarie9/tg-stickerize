@@ -104,12 +104,3 @@ docker_manifests:
     image_templates:
       - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-arm64"
       - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-amd64"
-
-# Sign the Docker images with cosign as well.
-docker_signs:
-  - cmd: cosign
-    artifacts: manifests
-    args:
-      - "sign"
-      - "${artifact}"
-      - "--yes"
