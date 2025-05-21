@@ -1,0 +1,8 @@
+services:
+  tg-stickerize:
+    image: ghcr.io/sakarie9/tg-stickerize:latest
+    container_name: tg-stickerize
+    environment:
+      - TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+      - ALLOWED_CHAT_IDS=123456789,987654321
+    restart: unless-stopped

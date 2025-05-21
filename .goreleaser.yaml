@@ -14,17 +14,27 @@ before:
     - cargo fetch --locked
 
 builds:
-  - builder: rust
-    # tool: cross
-    # command: build
+  # - id: linux-amd64-gnu
+  #   builder: rust
+  #   targets:
+  #     - x86_64-unknown-linux-gnu
+  - id: linux-amd64-musl
+    builder: rust
     targets:
-      - x86_64-unknown-linux-gnu
-      # - x86_64-apple-darwin
+      - x86_64-unknown-linux-musl
+  # - id: linux-arm64-gnu
+  #   builder: rust
+  #   targets:
+  #     - aarch64-unknown-linux-gnu
+  - id: linux-arm64-musl
+    builder: rust
+    targets:
+      - aarch64-unknown-linux-musl
+  - id: windows-amd64-gnu
+    builder: rust
+    targets:
       - x86_64-pc-windows-gnu
-      - aarch64-unknown-linux-gnu
-      # - aarch64-apple-darwin
 
-# Creates archives for each target.
 archives:
   - formats: tar.gz
     # this name template makes the OS and Arch compatible with the results of `uname`.
@@ -33,7 +43,11 @@ archives:
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
+      {{- else }}{{ .Arch }}{{ end }}    
+    #  {{- if contains .Target "musl" }}-musl
+    #  {{- else if contains .Target "gnu" }}-gnu
+    #  {{- end }}
+
     # use zip for windows archives
     format_overrides:
       - goos: windows
@@ -54,6 +68,8 @@ dockers:
       - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-arm64"
     dockerfile: Dockerfile
     goarch: arm64
+    # ids:
+    #   - linux-arm64-musl
     use: buildx
     build_flag_templates:
       - "--pull"
@@ -67,6 +83,8 @@ dockers:
       - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-amd64"
     dockerfile: Dockerfile
     goarch: amd64
+    # ids:
+    #   - linux-amd64-musl
     use: buildx
     build_flag_templates:
       - "--pull"
