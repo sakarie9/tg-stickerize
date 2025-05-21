@@ -512,6 +512,7 @@ async fn main() -> Result<()> {
 
     // 启动机器人
     Dispatcher::builder(bot, handler)
+        .enable_ctrlc_handler()
         .build()
         .dispatch()
         .await;
