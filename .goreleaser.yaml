@@ -1,18 +1,11 @@
-# This is an example .goreleaser.yml file with some sensible defaults.
-# Make sure to check the documentation at https://goreleaser.com
-
-# The lines below are called `modelines`. See `:help modeline`
-# Feel free to remove those if you don't want/need to use them.
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 
 version: 2
 
 # Project name should ideally match the project name in your Cargo.toml.
-project_name: tg-stickerize
+project_name: "tg-stickerize"
 
-# Hooks ran before actually building anything.
-# Here we use them to prepare for building.
 before:
   hooks:
     - rustup default stable
@@ -20,7 +13,6 @@ before:
     # - cargo install --locked cross --git https://github.com/cross-rs/cross
     - cargo fetch --locked
 
-# Actually builds the binaries.
 builds:
   - builder: rust
     # tool: cross
@@ -47,28 +39,19 @@ archives:
       - goos: windows
         formats: zip
 
-# Changelog configuration (will be in the github release).
 changelog:
   sort: asc
   filters:
     exclude:
       - "^docs:"
       - "^test:"
+      - "^ci:"
+      - "^build:"
 
-# # A footer to add to all releases.
-# release:
-#   footer: >-
-#
-#     ---
-#
-#     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
-
-# Create Docker images.
-# We create a manifest below, so here the images need the suffix with the
-# architecture.
+##DOCKER_START##
 dockers:
   - image_templates:
-      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-arm64"
+      - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-arm64"
     dockerfile: Dockerfile
     goarch: arm64
     use: buildx
@@ -81,7 +64,7 @@ dockers:
       - "--label=org.opencontainers.image.source={{.GitURL}}"
       - "--platform=linux/arm64"
   - image_templates:
-      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-amd64"
+      - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-amd64"
     dockerfile: Dockerfile
     goarch: amd64
     use: buildx
@@ -96,11 +79,12 @@ dockers:
 
 # Here we join both images into a Docker manifest.
 docker_manifests:
-  - name_template: "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}"
+  - name_template: "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}"
     image_templates:
-      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-arm64"
-      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-amd64"
-  - name_template: "ghcr.io/sakarie9/{{.ProjectName}}:latest"
+      - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-arm64"
+      - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-amd64"
+  - name_template: "ghcr.io/sakarie9/tg-stickerize:latest"
     image_templates:
-      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-arm64"
-      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-amd64"
+      - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-arm64"
+      - "ghcr.io/sakarie9/tg-stickerize:{{ .Tag }}-amd64"
+##DOCKER_END##
