@@ -18,3 +18,5 @@ jobs:
       project_name: "tg-stickerize" # The name of the project. This should match the project name in your Cargo.toml.
       repo_owner: ${{ github.repository_owner }} # The owner/organization for the Docker image on GHCR (e.g., your GitHub username or org name)
       repo_name: ${{ github.event.repository.name }} # The name of the repository for the Docker image on GHCR
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
