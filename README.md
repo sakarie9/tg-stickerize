@@ -23,7 +23,7 @@
   - Telegram动图 (通常是MP4格式)
 - **自动类型检测**: 使用 `infer` 库检测文件类型，即使Telegram没有提供准确的MIME类型。
 
-## 安装与配置
+## 安装及配置
 
 ### 先决条件
 
@@ -35,43 +35,27 @@
 - **libvpx**: FFmpeg通常会自带，但如果遇到VP9编码问题，请确保已安装。
   - 在Debian/Ubuntu上: `sudo apt install libvpx-dev`
 
-### 步骤
+### Docker 运行
 
-1. **克隆仓库**:
-
-    ```bash
-    git clone <repository-url>
-    cd tg-stickerize
-    ```
-
-2. **创建 `.env` 文件**:
-    在项目根目录下创建一个名为 `.env` 的文件，并添加你的Telegram机器人Token：
-
-    ```env
-    TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-    ```
-
-    你可以从BotFather获取机器人Token。
-
-3. **编译项目**:
-
-    ```bash
-    cargo build --release
-    ```
-
-## 运行机器人
-
-### 从二进制运行
-
-从 release 中下载对应系统架构的二进制文件运行
-
-### 从源码运行
-
-```bash
-cargo run --release
+```shell
+docker run -e TELEGRAM_BOT_TOKEN=token -e ALLOWED_CHAT_IDS=114514,1919 ghcr.io/sakarie9/tg-stickerize:latest
 ```
 
-机器人启动后，它会开始监听来自Telegram的消息。
+`ALLOWED_CHAT_IDS` 为可选参数，可删除
+
+### 二进制运行
+
+1. 创建 `.env` 文件
+
+   参考 `.env.example`，在项目根目录下创建一个名为 `.env` 的文件，并添加你的Telegram机器人Token：
+
+   ```env
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+   ```
+
+   你可以从BotFather获取机器人Token
+
+2. 从 release 中下载对应系统架构的二进制文件运行
 
 ## 使用方法
 

@@ -35,17 +35,18 @@ This is a Telegram bot that processes images and WebM videos sent by users into 
 - **libvpx**: Usually comes with FFmpeg, but ensure it's installed if you encounter VP9 encoding issues.
   - On Debian/Ubuntu: `sudo apt install libvpx-dev`
 
-### Steps
+### Docker Run
 
-1. **Clone the repository**:
+```shell
+docker run -e TELEGRAM_BOT_TOKEN=token -e ALLOWED_CHAT_IDS=114514,1919 ghcr.io/sakarie9/tg-stickerize:latest
+```
 
-    ```bash
-    git clone <repository-url>
-    cd tg-stickerize
-    ```
+`ALLOWED_CHAT_IDS` is an optional parameter and can be omitted.
 
-2. **Create `.env` file**:
-    Create a file named `.env` in the project root directory and add your Telegram bot token:
+### Binary Run
+
+1. **Create `.env` file**:
+    Refer to `.env.example`. Create a file named `.env` in the project root directory and add your Telegram bot token:
 
     ```env
     TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
@@ -53,25 +54,34 @@ This is a Telegram bot that processes images and WebM videos sent by users into 
 
     You can get your bot token from BotFather.
 
+2. **Download and run from release**:
+    Download the binary file for the corresponding system architecture from the release and run it.
+
+## Building and Running from Source
+
+1. **Clone the repository**:
+
+    ```bash
+    git clone <repository-url> # Or your fork
+    cd tg-stickerize
+    ```
+
+2. **Create `.env` file** (if not already done for binary run):
+    Follow the instructions in the "Binary Run" section (Step 1) to create your `.env` file.
+
 3. **Build the project**:
 
     ```bash
     cargo build --release
     ```
 
-## Running the Bot
+4. **Run the bot**:
 
-### Running from binary
+    ```bash
+    cargo run --release
+    ```
 
-Download the binary file for the corresponding system architecture from the release and run it.
-
-### Running from source
-
-```bash
-cargo run --release
-```
-
-Once the bot starts, it will begin listening for messages from Telegram.
+    Once the bot starts, it will begin listening for messages from Telegram.
 
 ## How to Use
 

@@ -1,13 +1,14 @@
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use dotenv::dotenv;
 use image::imageops::FilterType;
 use image::{GenericImageView, ImageReader};
 use serde_json;
-use teloxide::types::InputFile;
+use teloxide::types::{ChatId, InputFile};
 use teloxide::{prelude::*, utils::command::BotCommands};
 use tempfile::{Builder, NamedTempFile};
 use tokio::fs as tokio_fs;
@@ -361,20 +362,41 @@ async fn handle_file(bot: Bot, msg: Message) -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn send_welcome_message(bot: Bot, chat_id: ChatId) -> anyhow::Result<()> {
+    bot.send_message(
+        chat_id,
+        "欢迎使用 Telegram Sticker 优化工具！\n\n\
+         请发送图片或WebM视频，我将处理成符合 Telegram 贴纸要求的格式。\n\n\
+         - 图片将被调整至合适尺寸并转换为WebP格式\n\
+         - 视频将被调整至合适尺寸、帧率和时长，转换为WebM格式\n\n\
+         您也可以使用 /help 查看可用命令。\n\n\
+         处理后，您可以将文件添加到 @Stickers bot 创建的贴纸包中。",
+    )
+    .await?;
+    Ok(())
+}
+
 async fn command_handler(bot: Bot, msg: Message, cmd: BotCommand) -> anyhow::Result<()> {
     match cmd {
         BotCommand::Help | BotCommand::Start => {
-            bot.send_message(
-                msg.chat.id,
-                "欢迎使用 Telegram Sticker 优化工具！\n\n\
-                 请发送图片或WebM视频，我将处理成符合 Telegram 贴纸要求的格式。\n\n\
-                 - 图片将被调整至合适尺寸并转换为WebP格式\n\
-                 - 视频将被调整至合适尺寸、帧率和时长，转换为WebM格式\n\n\
-                 处理后，您可以将文件添加到 @Stickers bot 创建的贴纸包中。",
-            )
-            .await?;
+            send_welcome_message(bot, msg.chat.id).await?;
         }
     }
+    Ok(())
+}
+
+async fn unhandled_message_handler(bot: Bot, msg: Message) -> anyhow::Result<()> {
+    send_welcome_message(bot, msg.chat.id).await?;
+    Ok(())
+}
+
+async fn unauthorized_access_handler(bot: Bot, msg: Message) -> anyhow::Result<()> {
+    log::warn!(
+        "ChatID: {} - Unauthorized access attempt.",
+        msg.chat.id
+    );
+    bot.send_message(msg.chat.id, "抱歉，您未被授权使用此机器人。")
+        .await?;
     Ok(())
 }
 
@@ -391,28 +413,105 @@ async fn main() -> Result<()> {
     let token = std::env::var("TELEGRAM_BOT_TOKEN")
         .context("未找到TELEGRAM_BOT_TOKEN环境变量。请在.env文件中设置或直接设置环境变量")?;
 
+    // 白名单逻辑
+    let allowed_chat_ids_opt: Option<Arc<Vec<ChatId>>> =
+        match std::env::var("ALLOWED_CHAT_IDS") {
+            Ok(ids_str) => {
+                let ids: Vec<ChatId> = ids_str
+                    .split(',')
+                    .filter_map(|id_str| id_str.trim().parse::<i64>().ok().map(ChatId))
+                    .collect();
+                
+                if ids.is_empty() {
+                    log::warn!(
+                        "ALLOWED_CHAT_IDS 设置为 '{}', 解析后白名单为空。机器人将不会授权任何用户。",
+                        ids_str
+                    );
+                } else {
+                    log::info!("白名单已启用。允许的聊天 ID: {:?}", ids);
+                }
+                Some(Arc::new(ids))
+            }
+            Err(_) => {
+                log::info!("未设置 ALLOWED_CHAT_IDS。机器人将响应所有用户。");
+                None
+            }
+        };
+
     let bot = Bot::new(token);
+
+    // 为命令处理程序创建过滤器闭包
+    let command_filter_ids_clone = allowed_chat_ids_opt.clone();
+    let command_auth_filter = move |msg: Message| {
+        match &command_filter_ids_clone {
+            Some(allowed_ids) => {
+                if allowed_ids.contains(&msg.chat.id) {
+                    true
+                } else {
+                    // log::warn!("ChatID: {} - 来自非白名单用户的未授权命令尝试。", msg.chat.id); // 日志将由 unauthorized_access_handler 处理
+                    false
+                }
+            }
+            None => true, // 没有白名单，允许所有用户
+        }
+    };
+
+    // 为文件处理程序创建过滤器闭包
+    let file_filter_ids_clone = allowed_chat_ids_opt.clone();
+    let file_auth_and_type_filter = move |msg: Message| {
+        let authorized = match &file_filter_ids_clone {
+            Some(allowed_ids) => {
+                if allowed_ids.contains(&msg.chat.id) {
+                    true
+                } else {
+                    // log::warn!("ChatID: {} - 来自非白名单用户的未授权文件提交。", msg.chat.id); // 日志将由 unauthorized_access_handler 处理
+                    false
+                }
+            }
+            None => true, // 没有白名单，允许所有用户
+        };
+
+        if !authorized {
+            return false;
+        }
+
+        // 原始文件类型检查
+        msg.photo().is_some()
+            || msg.document().is_some()
+            || msg.sticker().is_some()
+            || msg.animation().is_some()
+    };
+
+    // 为未处理消息创建认证过滤器 (用于 unhandled_message_handler)
+    let unhandled_message_auth_filter_ids = allowed_chat_ids_opt.clone();
+    let unhandled_message_auth_filter = move |msg: Message| {
+        match &unhandled_message_auth_filter_ids {
+            Some(allowed_ids) => allowed_ids.contains(&msg.chat.id),
+            None => true, // 如果没有白名单，则所有人都被授权接收欢迎消息
+        }
+    };
 
     // 创建处理器
     let handler = Update::filter_message()
         .branch(
             dptree::entry()
                 .filter_command::<BotCommand>()
+                .filter(command_auth_filter) // 应用白名单过滤器
                 .endpoint(command_handler),
         )
         .branch(
-            dptree::filter(|msg: Message| {
-                msg.photo().is_some()
-                    || msg.document().is_some()
-                    || msg.sticker().is_some()
-                    || msg.animation().is_some()
-            })
+            dptree::filter(file_auth_and_type_filter) // 应用白名单和类型过滤器
             .endpoint(handle_file),
-        );
+        )
+        .branch( // 对于已授权用户发送的、非命令且非文件的消息
+            dptree::entry()
+                .filter(unhandled_message_auth_filter)
+                .endpoint(unhandled_message_handler), // 发送欢迎信息
+        )
+        .branch(dptree::endpoint(unauthorized_access_handler)); // 对于未授权用户的任何其他消息
 
     // 启动机器人
     Dispatcher::builder(bot, handler)
-        .enable_ctrlc_handler()
         .build()
         .dispatch()
         .await;
