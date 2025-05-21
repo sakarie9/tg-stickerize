@@ -63,10 +63,6 @@ changelog:
 #
 #     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
 
-# Enables source archives.
-source:
-  enabled: true
-
 # Create Docker images.
 # We create a manifest below, so here the images need the suffix with the
 # architecture.

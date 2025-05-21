@@ -3,12 +3,18 @@ name = "tg-stickerize"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+lto = true           # 启用链接时优化
+panic = "abort"      # 如果不需要展开panic堆栈，可以减小大小
+strip = true         # 从二进制文件中剥离调试符号
+opt-level = "z"      # 积极优化大小 (或者 "s" 也是一个选项)
+
 [dependencies]
 anyhow = "1.0"
-teloxide = { version = "0.15", features = ["macros"] }
+teloxide = { version = "0.15", default-features = false, features = ["macros", "rustls"] }
 tokio = { version = "1.45", features = ["rt-multi-thread", "macros"] }
-image = "0.25"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 tempfile = "3.20"
 log = "0.4"
 pretty_env_logger = "0.5"
@@ -16,4 +22,3 @@ infer = "0.19"
 dptree = "0.3"
 dotenv = "0.15"
 serde_json = "1.0"
-openssl = { version = "0.10.72", features = ["vendored"] }
