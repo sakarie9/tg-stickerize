@@ -100,3 +100,7 @@ docker_manifests:
     image_templates:
       - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-arm64"
       - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-amd64"
+  - name_template: "ghcr.io/sakarie9/{{.ProjectName}}:latest"
+    image_templates:
+      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-arm64"
+      - "ghcr.io/sakarie9/{{.ProjectName}}:{{ .Tag }}-amd64"
