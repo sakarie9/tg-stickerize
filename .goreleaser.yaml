@@ -9,7 +9,7 @@
 version: 2
 
 # Project name should ideally match the project name in your Cargo.toml.
-project_name: example
+project_name: tg-stickerize
 
 # Hooks ran before actually building anything.
 # Here we use them to prepare for building.
