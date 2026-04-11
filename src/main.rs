@@ -7,7 +7,6 @@ use anyhow::{Context, Result, anyhow};
 use dotenv::dotenv;
 use image::imageops::FilterType;
 use image::{GenericImageView, ImageReader};
-use serde_json;
 use teloxide::types::{ChatId, InputFile};
 use teloxide::{prelude::*, utils::command::BotCommands};
 use tempfile::{Builder, NamedTempFile};
