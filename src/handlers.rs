@@ -33,7 +33,7 @@ pub async fn send_welcome_message(bot: Bot, chat_id: ChatId, mode: Mode) -> anyh
             - 视频 → GIF\n\
             - 动态贴纸 → GIF\n\
             - 动图 → GIF\n\
-            （图片将被忽略）"
+            - 图片 → 作为文档发送"
         }
     };
 
@@ -64,7 +64,7 @@ pub async fn command_handler(
             let new_mode = toggle_chat_mode(&mode_state, msg.chat.id);
             let extra = match new_mode {
                 Mode::StickerOptimize => "现在可以发送图片或视频，我将处理成贴纸格式。",
-                Mode::GifDownload => "现在可以发送视频、动图或动态贴纸，我将返回 GIF 文件。",
+                Mode::GifDownload => "现在可以发送视频、动图、动态贴纸或图片，我将返回 GIF 文件或原图。",
             };
             let message = format!("✅ 已切换到 **{}**\n\n{}", new_mode, extra);
             bot.send_message(msg.chat.id, message).await?;
@@ -176,15 +176,12 @@ pub async fn handle_file(bot: Bot, msg: Message, mode_state: ModeState) -> anyho
     let current_mode = get_chat_mode(&mode_state, msg.chat.id);
     log::info!("ChatID: {}, 当前模式: {:?}", msg.chat.id, current_mode);
 
-    // GIF 模式下忽略图片
+    // GIF 模式下直接发送图片作为文档
     if current_mode == Mode::GifDownload && is_image {
-        bot.send_message(
-            msg.chat.id,
-            "🎞️ 当前处于 GIF 下载模式，图片将被忽略。\n\
-            发送视频、动图或动态贴纸以转换为 GIF。\n\
-            使用 /mode 切换回贴纸优化模式。",
-        )
-        .await?;
+        let input_doc = teloxide::types::InputFile::file(&input_file_path);
+        bot.send_document(msg.chat.id, input_doc)
+            .disable_content_type_detection(true)
+            .await?;
         return Ok(());
     }
 
