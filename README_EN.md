@@ -6,6 +6,9 @@ This is a Telegram bot that processes images and WebM videos sent by users into 
 
 ## Features
 
+- **Dual Working Modes**:
+  - **Sticker Optimize Mode** (default): Converts images and videos into Telegram sticker format.
+  - **GIF Download Mode**: Converts videos, animations, and animated stickers into GIF files.
 - **Image Processing**:
   - Resizes images to have one side of 512 pixels, with the other side scaled proportionally.
   - Converts images to WebP format.
@@ -16,6 +19,9 @@ This is a Telegram bot that processes images and WebM videos sent by users into 
   - Limits video frame rate to 30fps or less.
   - Converts videos to VP9 encoded WebM format.
   - Ensures the processed video file size does not exceed 256KB.
+- **GIF Conversion**:
+  - Converts videos, animations, and animated stickers to GIF format.
+  - Preserves original resolution and frame rate using an optimized color palette.
 - **Supported Inputs**:
   - Images (JPEG, PNG, GIF, etc., formats supported by the `image` crate)
   - Videos (WebM, MP4, etc., formats supported by `ffmpeg`, but primarily optimized for WebM)
@@ -86,17 +92,26 @@ docker run -e TELEGRAM_BOT_TOKEN=token -e ALLOWED_CHAT_IDS=114514,1919 ghcr.io/s
 ## How to Use
 
 1. Find your bot on Telegram.
-2. Send an image or WebM video file to the bot.
-    - You can send image files directly.
-    - You can send video files directly (WebM recommended, other formats will be attempted to convert).
-    - You can send existing stickers or animated GIFs.
-3. The bot will automatically process the file and reply with an optimized sticker file.
-4. You can forward the sticker file replied by the bot to the `@Stickers` bot and follow the prompts to add it to your sticker pack.
+2. Use the `/mode` command to switch between working modes (Sticker Optimize or GIF Download).
+3. Send a file to the bot:
+
+### Sticker Optimize Mode (Default)
+
+- Send an image file → Converted to WebP sticker
+- Send a video file (WebM recommended, other formats will be attempted) → Converted to VP9 WebM sticker
+- Send an existing sticker or animated GIF → Converted to sticker format
+
+### GIF Download Mode
+
+- Send a video, animation, or animated sticker → Converted to GIF file
+
+1. In **Sticker Optimize Mode**, you can forward the sticker file replied by the bot to the `@Stickers` bot and follow the prompts to add it to your sticker pack.
 
 ### Supported Commands
 
 - `/start` - Displays a welcome message and usage instructions.
 - `/help` - Displays help information and usage instructions.
+- `/mode` - Switch working mode (Sticker Optimize / GIF Download).
 
 ## Notes
 
