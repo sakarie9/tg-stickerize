@@ -253,7 +253,7 @@ async fn handle_file(bot: Bot, msg: Message) -> anyhow::Result<()> {
     };
 
     // 下载文件前先获取文件信息
-    let tg_file = bot.get_file(&file_id).await?;
+    let tg_file = bot.get_file(file_id).await?;
 
     // 创建输入临时文件
     let input_temp_file = NamedTempFile::new().context("无法创建输入临时文件")?;

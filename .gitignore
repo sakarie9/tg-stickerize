@@ -21,3 +21,4 @@ target/
 
 .env
 dist
+target

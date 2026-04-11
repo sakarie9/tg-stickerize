@@ -10,28 +10,28 @@ strip = true    # 从二进制文件中剥离调试符号
 opt-level = "z" # 积极优化大小 (或者 "s" 也是一个选项)
 
 [dependencies]
-anyhow = "1.0"
-teloxide = { version = "0.15", default-features = false, features = [
+anyhow = "1.0.102"
+teloxide = { version = "0.17.0", default-features = false, features = [
     "macros",
     "rustls",
     "ctrlc_handler",
 ] }
-tokio = { version = "1.45", features = ["rt-multi-thread", "macros"] }
-image = { version = "0.25", default-features = false, features = [
+tokio = { version = "1.51.1", features = ["rt-multi-thread", "macros"] }
+image = { version = "0.25.10", default-features = false, features = [
     "jpeg",
     "png",
     "webp",
     "gif",
 ] }
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.12.28", default-features = false, features = [
     "json",
     "stream",
     "rustls-tls",
 ] }
-tempfile = "3.20"
-log = "0.4"
-env_logger = "0.11"
-infer = "0.19"
-dptree = "0.3"
-dotenv = "0.15"
-serde_json = "1.0"
+tempfile = "3.27.0"
+log = "0.4.29"
+env_logger = "0.11.10"
+infer = "0.19.0"
+dptree = "0.5.1"
+dotenv = "0.15.0"
+serde_json = "1.0.149"
